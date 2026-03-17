@@ -64,7 +64,7 @@ def fetch_twse_ohlc(symbol: str, date_str: str) -> List[Dict]:
     }
     
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, params=params, timeout=10, verify=False)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -125,7 +125,7 @@ def fetch_tpex_ohlc(symbol: str, date_str: str) -> List[Dict]:
     }
     
     try:
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, params=params, timeout=10, verify=False)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
