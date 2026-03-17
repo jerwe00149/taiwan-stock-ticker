@@ -15,8 +15,8 @@ interface Props {
 export default function CandlestickChart({ data, newsTimeline, selectedDate, onDateClick }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [range, setRange] = useState<[number, number]>([0, 0])
+  const dragRef = useRef<{ startX: number; startRange: [number, number] } | null>(null)
 
-  // Initialize range when data changes
   useEffect(() => {
     if (data.length > 0) {
       const start = Math.max(0, data.length - 60)
@@ -24,20 +24,25 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
     }
   }, [data])
 
-  // Scroll zoom handler
+  // Scroll zoom
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()
     const [start, end] = range
     const visible = end - start
-    const delta = e.deltaY > 0 ? Math.ceil(visible * 0.15) : -Math.ceil(visible * 0.15)
-    
-    // Zoom centered
-    const newStart = Math.max(0, start - delta)
-    const newEnd = Math.min(data.length, end + delta)
-    
-    // Min 10 candles, max all data
-    if (newEnd - newStart >= 10 && newEnd - newStart <= data.length) {
-      setRange([newStart, newEnd])
+
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      // Shift+scroll or trackpad horizontal = pan
+      const panAmount = Math.ceil(visible * 0.1) * (e.deltaX !== 0 ? Math.sign(e.deltaX) : Math.sign(e.deltaY))
+      const newStart = Math.max(0, Math.min(data.length - visible, start + panAmount))
+      setRange([newStart, newStart + visible])
+    } else {
+      // Vertical scroll = zoom
+      const delta = e.deltaY > 0 ? Math.ceil(visible * 0.15) : -Math.ceil(visible * 0.15)
+      const newStart = Math.max(0, start - delta)
+      const newEnd = Math.min(data.length, end + delta)
+      if (newEnd - newStart >= 10 && newEnd - newStart <= data.length) {
+        setRange([newStart, newEnd])
+      }
     }
   }, [range, data.length])
 
@@ -47,6 +52,25 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
     svg.addEventListener('wheel', handleWheel, { passive: false })
     return () => svg.removeEventListener('wheel', handleWheel)
   }, [handleWheel])
+
+  // Drag to pan
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    dragRef.current = { startX: e.clientX, startRange: [...range] as [number, number] }
+  }, [range])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragRef.current || !svgRef.current) return
+    const dx = e.clientX - dragRef.current.startX
+    const chartWidth = svgRef.current.clientWidth
+    const visible = dragRef.current.startRange[1] - dragRef.current.startRange[0]
+    const panCandles = Math.round(-dx / (chartWidth / visible))
+    const newStart = Math.max(0, Math.min(data.length - visible, dragRef.current.startRange[0] + panCandles))
+    setRange([newStart, newStart + visible])
+  }, [data.length])
+
+  const handleMouseUp = useCallback(() => {
+    dragRef.current = null
+  }, [])
 
   useEffect(() => {
     if (!data.length || !svgRef.current || range[1] === 0) return
@@ -83,27 +107,23 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
     // Candles
     const candles = g.selectAll('.candle').data(visibleData).join('g').attr('class', 'candle').style('cursor', 'pointer')
 
-    // Click area
     candles.append('rect')
       .attr('x', d => x(d.date)! - 1).attr('y', 0)
       .attr('width', x.bandwidth() + 2).attr('height', height)
       .attr('fill', 'transparent')
       .on('click', (_, d) => onDateClick(d.date))
 
-    // Selected highlight
     candles.append('rect')
       .attr('x', d => x(d.date)! - 2).attr('y', 0)
       .attr('width', x.bandwidth() + 4).attr('height', height)
       .attr('fill', d => d.date === selectedDate ? 'rgba(68,138,255,0.12)' : 'transparent')
 
-    // Wicks
     candles.append('line')
       .attr('x1', d => x(d.date)! + x.bandwidth() / 2)
       .attr('x2', d => x(d.date)! + x.bandwidth() / 2)
       .attr('y1', d => y(d.high)).attr('y2', d => y(d.low))
       .attr('stroke', d => d.close >= d.open ? '#ff1744' : '#00e676')
 
-    // Bodies
     candles.append('rect')
       .attr('x', d => x(d.date)!)
       .attr('y', d => y(Math.max(d.open, d.close)))
@@ -114,7 +134,6 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
       .attr('stroke-width', d => d.date === selectedDate ? 1.5 : 0)
       .attr('rx', 1)
 
-    // News dots
     candles.each(function(d) {
       const n = newsMap.get(d.date)
       if (n && n.news_count > 0) {
@@ -157,7 +176,7 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
       .attr('fill', d => d.close >= d.open ? 'rgba(255,23,68,0.25)' : 'rgba(0,230,118,0.25)')
       .style('cursor', 'pointer').on('click', (_, d) => onDateClick(d.date))
 
-    // Axes
+    // X Axis
     const tickInterval = Math.max(1, Math.ceil(visibleData.length / 8))
     const xAxis = g.append('g').attr('transform', `translate(0,${height})`)
       .call(d3.axisBottom(x).tickValues(x.domain().filter((_, i) => i % tickInterval === 0)))
@@ -165,17 +184,27 @@ export default function CandlestickChart({ data, newsTimeline, selectedDate, onD
       .attr('transform', 'rotate(-40)').attr('text-anchor', 'end')
     xAxis.selectAll('line,path').attr('stroke', '#333')
 
+    // Y Axis
     g.append('g').attr('transform', `translate(${width},0)`)
       .call(d3.axisRight(y).ticks(5).tickFormat(d3.format('.0f')))
       .selectAll('text').attr('fill', '#888').attr('font-size', 10)
 
-    // Zoom info
+    // Info
     svg.append('text')
       .attr('x', margin.left + 5).attr('y', margin.top + height + volHeight + 48)
       .attr('fill', '#555').attr('font-size', 10)
-      .text(`顯示 ${visibleData.length}/${data.length} 根 ⟠ 滾輪縮放`)
+      .text(`顯示 ${visibleData.length}/${data.length} 根 ⟠ 滾輪縮放 ⟠ 拖曳平移 ⟠ Shift+滾輪左右`)
 
   }, [data, newsTimeline, selectedDate, range])
 
-  return <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
+  return (
+    <svg
+      ref={svgRef}
+      style={{ width: '100%', height: '100%', cursor: dragRef.current ? 'grabbing' : 'grab' }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    />
+  )
 }
