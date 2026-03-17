@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db
-from backend.api.routers import stocks, news, predict
+from backend.api.routers import stocks, news, predict, analysis
 
 app = FastAPI(
     title="台股新聞追蹤器 API",
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(stocks.router, prefix="/api")
 app.include_router(news.router, prefix="/api")
 app.include_router(predict.router, prefix="/api")
+app.include_router(analysis.router, prefix="/api")
 
 
 @app.on_event("startup")

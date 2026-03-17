@@ -3,6 +3,7 @@ import axios from 'axios'
 import StockSelector from './components/StockSelector'
 import CandlestickChart from './components/CandlestickChart'
 import NewsPanel from './components/NewsPanel'
+import AnalysisPanel from './components/AnalysisPanel'
 
 const API = '/api'
 
@@ -82,6 +83,13 @@ export default function App() {
           symbol={selected}
           selectedDate={selectedDate}
         />
+      </div>
+      
+      <div className="news-panel">
+        <h3 style={{ marginBottom: 12, fontSize: 15, color: '#448aff', padding: '0 8px' }}>
+          🤖 多代理交易分析
+        </h3>
+        <AnalysisPanel symbol={selected} />
       </div>
     </div>
   )
