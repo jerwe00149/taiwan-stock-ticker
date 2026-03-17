@@ -1,0 +1,63 @@
+{
+  "name": "taiwan-stock-ticker",
+  "version": "1.0.0",
+  "description": "台股新聞追蹤器 - Taiwan Stock News Ticker with AI Sentiment Analysis",
+  "author": "jerwe00149",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jerwe00149/taiwan-stock-ticker"
+  },
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "api": "uv run --with fastapi --with uvicorn --with pydantic-settings --with requests uvicorn backend.api.main:app --host 0.0.0.0 --port 8000",
+    "fetch:ohlc": "python -m backend.bulk_fetch",
+    "fetch:news": "python -m backend.bulk_fetch",
+    "analysis": "curl -s http://localhost:8000/api/analysis/2330 | python -m json.tool"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.10"
+  },
+  "keywords": [
+    "taiwan-stock",
+    "TWSE",
+    "TPEx",
+    "K-line",
+    "candlestick",
+    "sentiment-analysis",
+    "multi-agent",
+    "trading",
+    "AI"
+  ],
+  "config": {
+    "api_port": 8000,
+    "stocks": {
+      "top_25": [
+        "2330", "2317", "2454", "2412", "2308",
+        "2881", "2882", "2891", "2303", "3711",
+        "2886", "1301", "1303", "2002", "2884",
+        "3008", "2382", "2357", "2345", "3034",
+        "5274", "6669", "3443", "8069", "6547"
+      ]
+    },
+    "data_sources": {
+      "ohlc": "TWSE/TPEx Open API (free, no key)",
+      "news": "CNYES (鉅亨網) Search API",
+      "ai_analysis": "Multi-Agent Framework (local, no API key needed)"
+    },
+    "agents": {
+      "agent_1": "Fundamental Analyst - 基本面分析師",
+      "agent_2": "Technical Analyst - 技術面分析師 (RSI/MACD/Bollinger)",
+      "agent_3": "Positioning Analyst - 籌碼與結構分析師 (WHO-WHOM-WHAT)",
+      "agent_4": "Sentiment Analyst - 市場情緒分析師 (Fear/Greed Index)",
+      "lead_trader": "Lead Trader & Synthesizer - 交易經理"
+    },
+    "tunnels": {
+      "stock_ticker": "https://clarity-brussels-meanwhile-definitely.trycloudflare.com",
+      "land_layout": "https://viewed-tba-solutions-transaction.trycloudflare.com",
+      "accounting": "https://dose-grass-corrected-spa.trycloudflare.com"
+    }
+  }
+}
