@@ -19,6 +19,7 @@ export default function App() {
   const [ohlc, setOhlc] = useState<any[]>([])
   const [news, setNews] = useState<any[]>([])
   const [newsTimeline, setNewsTimeline] = useState<any[]>([])
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   useEffect(() => {
     axios.get(`${API}/stocks`).then(r => setStocks(r.data))
@@ -26,12 +27,18 @@ export default function App() {
 
   useEffect(() => {
     if (!selected) return
-    axios.get(`${API}/stocks/${selected}/ohlc?limit=120`).then(r => setOhlc(r.data))
-    axios.get(`${API}/news/${selected}?limit=50`).then(r => setNews(r.data))
+    axios.get(`${API}/stocks/${selected}/ohlc?limit=250`).then(r => setOhlc(r.data))
+    axios.get(`${API}/news/${selected}?limit=100`).then(r => setNews(r.data))
     axios.get(`${API}/news/${selected}/timeline`).then(r => setNewsTimeline(r.data))
+    setSelectedDate(null)
   }, [selected])
 
   const selectedStock = stocks.find(s => s.symbol === selected)
+
+  // Filter news by selected date
+  const filteredNews = selectedDate
+    ? news.filter(n => n.published_at?.startsWith(selectedDate))
+    : news
 
   return (
     <div className="app">
@@ -40,6 +47,14 @@ export default function App() {
         {selectedStock && (
           <span style={{ fontSize: 14, color: '#a0a0a0' }}>
             {selectedStock.symbol} {selectedStock.name} — {selectedStock.sector}
+          </span>
+        )}
+        {selectedDate && (
+          <span 
+            style={{ fontSize: 13, color: '#448aff', cursor: 'pointer', marginLeft: 'auto' }}
+            onClick={() => setSelectedDate(null)}
+          >
+            📅 {selectedDate} ✕ 顯示全部
           </span>
         )}
       </header>
@@ -53,11 +68,20 @@ export default function App() {
       </div>
       
       <div className="chart-area">
-        <CandlestickChart data={ohlc} newsTimeline={newsTimeline} />
+        <CandlestickChart 
+          data={ohlc} 
+          newsTimeline={newsTimeline}
+          selectedDate={selectedDate}
+          onDateClick={(date) => setSelectedDate(date === selectedDate ? null : date)}
+        />
       </div>
       
       <div className="news-panel">
-        <NewsPanel news={news} symbol={selected} />
+        <NewsPanel 
+          news={filteredNews} 
+          symbol={selected}
+          selectedDate={selectedDate}
+        />
       </div>
     </div>
   )
