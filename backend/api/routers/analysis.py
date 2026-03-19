@@ -1,5 +1,6 @@
-"""多代理分析 API"""
+"""多代理分析 API + Gemini AI 大腦"""
 
+import os, json, subprocess
 from fastapi import APIRouter, Query
 from backend.database import get_conn
 from backend.twse.client import TOP_STOCKS
@@ -7,43 +8,71 @@ from backend.agents.lead_trader import synthesize
 
 router = APIRouter(tags=["analysis"])
 
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC9VkJPwATispujOPL3Y5wjNeFSa1JfTq4")
+
+def gemini_analyze(symbol, name, reports, news):
+    headlines = "\n".join(f"• {n.get('title','')}" for n in news[:10]) or "（無）"
+    
+    fund = reports.get("fundamental", {})
+    tech = reports.get("technical", {})
+    sent = reports.get("sentiment", {})
+    
+    prompt = f"""你是專業台股分析師。根據以下數據，用繁體中文給出 {name}（{symbol}）的投資建議。
+
+技術指標：RSI {tech.get('indicators',{}).get('rsi','?')} / MACD柱 {tech.get('indicators',{}).get('macd_histogram','?')} / 5日漲跌 {tech.get('indicators',{}).get('price_change_5d','?')}%
+支撐 {tech.get('support_resistance',{}).get('support','?')} / 壓力 {tech.get('support_resistance',{}).get('resistance','?')}
+估值: {fund.get('valuation','?')} / 量比: {fund.get('key_metrics',{}).get('volume_ratio','?')}
+恐懼貪婪: {sent.get('fear_greed_score',50)}/100 / 羊群效應: {'有' if sent.get('herding',{}).get('detected') else '無'}
+
+近期新聞：
+{headlines}
+
+請回覆：
+1. 一句話結論（看多/看空/觀望+理由）
+2. 關鍵風險
+3. 建議操作（進場/觀望/減碼+價位）"""
+
+    try:
+        r = subprocess.run([
+            "curl", "-s",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}",
+            "-H", "content-type: application/json",
+            "-d", json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 400}
+            })
+        ], capture_output=True, text=True, timeout=20)
+        resp = json.loads(r.stdout)
+        return resp.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    except:
+        return ""
+
 
 @router.get("/analysis/{symbol}")
 def run_analysis(symbol: str, days: int = Query(120, ge=10, le=500)):
-    """執行多代理市場分析
-    
-    Returns 5-agent structured analysis + trade decision
-    """
     conn = get_conn()
     
-    # 取得 OHLC 數據
-    ohlc = conn.execute(
-        "SELECT * FROM ohlc WHERE symbol = ? ORDER BY date DESC LIMIT ?",
-        [symbol, days],
-    ).fetchall()
+    ohlc = conn.execute("SELECT * FROM ohlc WHERE symbol=? ORDER BY date DESC LIMIT ?", [symbol, days]).fetchall()
     ohlc = [dict(r) for r in reversed(ohlc)]
     
-    # 取得新聞
     news = conn.execute(
         """SELECT n.*, l.sentiment, l.sentiment_score, l.summary
-           FROM news_raw n
-           JOIN news_ticker nt ON n.id = nt.news_id
-           LEFT JOIN layer1_results l ON n.id = l.news_id AND l.symbol = nt.symbol
-           WHERE nt.symbol = ? ORDER BY n.published_at DESC LIMIT 50""",
-        [symbol],
-    ).fetchall()
+           FROM news_raw n JOIN news_ticker nt ON n.id=nt.news_id
+           LEFT JOIN layer1_results l ON n.id=l.news_id AND l.symbol=nt.symbol
+           WHERE nt.symbol=? ORDER BY n.published_at DESC LIMIT 50""", [symbol]).fetchall()
     news = [dict(r) for r in news]
-    
     conn.close()
     
-    # 公司資訊
     info = TOP_STOCKS.get(symbol, ("未知", "未知", "TWSE"))
     company_info = {"name": info[0], "sector": info[1], "market": info[2]}
     
-    # 執行分析
     result = synthesize(symbol, ohlc, news, company_info)
     
-    # 移除 raw_reports (太大)
-    result.pop("raw_reports", None)
+    # Add Gemini AI brain
+    raw = result.pop("raw_reports", {})
+    ai_text = gemini_analyze(symbol, info[0], raw, news)
+    if ai_text:
+        result["AI_Analysis"] = ai_text
+        result["Analysis_Reports"]["AI_Brain"] = f"🧠 Gemini Flash AI 判斷：\n\n{ai_text}"
     
     return result
