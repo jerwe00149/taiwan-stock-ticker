@@ -39,7 +39,7 @@ def gemini_analyze(symbol, name, reports, news):
             "-H", "content-type: application/json",
             "-d", json.dumps({
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 400}
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1500, "thinkingConfig": {"thinkingBudget": 200}}
             })
         ], capture_output=True, text=True, timeout=20)
         resp = json.loads(r.stdout)
