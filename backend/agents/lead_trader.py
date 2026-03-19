@@ -182,3 +182,91 @@ def synthesize(symbol: str, ohlc_data: list, news_data: list, company_info: dict
         "Bull_Bear_Debate": debate,
         "raw_reports": reports,
     }
+
+import subprocess
+
+GEMINI_KEY = "AIzaSyC9VkJPwATispujOPL3Y5wjNeFSa1JfTq4"
+
+def ai_analysis(symbol: str, company_info: dict, reports: dict, news_data: list) -> str:
+    """Gemini Flash 讀新聞 + 數據後給出 AI 判斷"""
+    name = company_info.get("name", symbol)
+    
+    # Collect top news headlines
+    headlines = []
+    for n in news_data[:10]:
+        title = n.get("title", "")
+        if title:
+            headlines.append(title)
+    
+    news_text = "\n".join(f"• {h}" for h in headlines) if headlines else "（無近期新聞）"
+    
+    # Get key metrics from agents
+    fund = reports["fundamental"]
+    tech = reports["technical"]
+    sent = reports["sentiment"]
+    pos = reports["positioning"]
+    
+    prompt = f"""你是專業台股分析師。請根據以下數據，用繁體中文給出 {name}（{symbol}）的投資建議。
+
+📊 技術指標：
+- RSI: {tech.get('indicators',{}).get('rsi','N/A')}
+- MACD柱狀體: {tech.get('indicators',{}).get('macd_histogram','N/A')}
+- 布林帶寬: {tech.get('indicators',{}).get('bollinger_bandwidth','N/A')}%
+- 5日漲跌: {tech.get('indicators',{}).get('price_change_5d','N/A')}%
+- 支撐: {tech.get('support_resistance',{}).get('support','N/A')} / 壓力: {tech.get('support_resistance',{}).get('resistance','N/A')}
+
+📈 基本面：
+- 估值: {fund.get('valuation','N/A')}
+- 股價vs120日均線: {fund.get('key_metrics',{}).get('price_vs_ma120_pct','N/A')}%
+- 量比: {fund.get('key_metrics',{}).get('volume_ratio','N/A')}
+
+🔥 情緒面：
+- 恐懼貪婪指數: {sent.get('fear_greed_score',50)}/100
+- 羊群效應: {'有' if sent.get('herding',{}).get('detected') else '無'}
+
+📰 近期新聞：
+{news_text}
+
+請回覆（100字內）：
+1. 一句話結論（看多/看空/觀望）
+2. 最關鍵的理由
+3. 建議操作策略"""
+
+    try:
+        result = subprocess.run([
+            "curl", "-s",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}",
+            "-H", "content-type: application/json",
+            "-d", json.dumps({
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300}
+            })
+        ], capture_output=True, text=True, timeout=15)
+        
+        resp = json.loads(result.stdout)
+        return resp.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    except:
+        return ""
+
+
+# Patch synthesize to include AI analysis
+_original_synthesize = synthesize
+
+def synthesize_with_ai(symbol, ohlc_data, news_data, company_info):
+    result = _original_synthesize(symbol, ohlc_data, news_data, company_info)
+    
+    # Add Gemini AI analysis
+    try:
+        ai_text = ai_analysis(symbol, company_info, result.get("raw_reports", {}), news_data)
+        if ai_text:
+            result["AI_Analysis"] = ai_text
+            result["Analysis_Reports"]["AI_Brain"] = f"🧠 Gemini Flash AI 分析：\n{ai_text}"
+    except:
+        pass
+    
+    # Remove raw_reports before returning
+    result.pop("raw_reports", None)
+    return result
+
+# Replace
+synthesize = synthesize_with_ai

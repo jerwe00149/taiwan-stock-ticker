@@ -60,6 +60,7 @@ export default function AnalysisPanel({ symbol }: Props) {
     { key: 'Technical', label: '📈 Agent 2: 技術面分析師', color: '#ff9100' },
     { key: 'Positioning_and_Chips', label: '🎲 Agent 3: 籌碼與結構分析師', color: '#e040fb' },
     { key: 'Market_Sentiment', label: '🔥 Agent 4: 市場情緒分析師', color: '#ff1744' },
+    { key: 'AI_Brain', label: '🧠 AI 大腦 (Gemini Flash)', color: '#00e5ff' },
   ]
 
   return (
