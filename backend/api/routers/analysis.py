@@ -8,7 +8,7 @@ from backend.agents.lead_trader import synthesize
 
 router = APIRouter(tags=["analysis"])
 
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC9VkJPwATispujOPL3Y5wjNeFSa1JfTq4")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyB6VEnSlRni8fxhEVZrQbyNjm76zXQKjvU")
 
 def gemini_analyze(symbol, name, reports, news):
     headlines = "\n".join(f"• {n.get('title','')}" for n in news[:10]) or "（無）"
@@ -76,3 +76,15 @@ def run_analysis(symbol: str, days: int = Query(120, ge=10, le=500)):
         result["Analysis_Reports"]["AI_Brain"] = f"🧠 Gemini Flash AI 判斷：\n\n{ai_text}"
     
     return result
+
+from pathlib import Path
+from fastapi.responses import JSONResponse
+
+@router.get("/ai-dashboard")
+def get_ai_dashboard():
+    """取得台股智能分析系統的每日報告"""
+    result_path = Path.home() / ".openclaw/workspace/taiwan-stock-ticker/analysis_results.json"
+    if result_path.exists():
+        import json
+        return json.loads(result_path.read_text())
+    return {"date": "", "market": "", "stocks": {}, "ai_dashboard": "尚無分析報告，請等待每日 14:30 自動分析"}
